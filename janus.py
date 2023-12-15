@@ -1,12 +1,14 @@
-#!/usr/bin/python3
-import requests
-import boto3
+#!/usr/bin/env python3
+
 import json
 import sys
 import os
+from typing import Dict
 
+import requests
+import boto3
 
-def get_metadata(path: str, parameter: str):
+def get_metadata(path: str, parameter: str) -> str:
     # Use .format() instead of f-type to support python version before 3.7
     metadata_url = 'http://metadata.google.internal/computeMetadata/v1/{}/{}'.format(path, parameter)
     headers = {'Metadata-Flavor': 'Google'}
@@ -21,21 +23,13 @@ def get_metadata(path: str, parameter: str):
     else:
         raise SystemExit('Compute Engine meta data error')
 
-
-if __name__ == '__main__':
-    # Get AWS ARN from command line if specified
-    if len(sys.argv) == 2:
-        aws_role_arn = sys.argv[1]
-
-    # Get AWS ARN from env var if specified
-    elif 'AWS_JANUS_ROLE' in os.environ:
-        aws_role_arn = os.environ['AWS_JANUS_ROLE']
-
-    # Fail if both argv and env var configuration failed
-    else:
-        print('Please specify AWS arn role:\neither via env var `AWS_JANUS_ROLE` or \n CLI argument `{} arn:aws:iam::account-id:role/role-name`'.format(sys.argv[0]))
-        exit(0)
-
+def assume_aws_role_from_gcp(aws_role_arn: str) -> Dict[str, str]:
+    """Assumes AWS role from GCP compute instance.
+    
+    params:
+        aws_role_arn: AWS role ARN to assume.
+    returns: json dump of the temporary credentials.
+    """
     # Get variables from the metadata server
     try:
         instance_name = get_metadata('instance', 'hostname')
@@ -62,4 +56,23 @@ if __name__ == '__main__':
         'Expiration': res['Credentials']['Expiration'].isoformat()
     }
 
-    print(json.dumps(aws_temporary_credentials))
+    return aws_temporary_credentials
+
+if __name__ == '__main__':
+    # Get AWS ARN from command line if specified
+    if len(sys.argv) == 2:
+        aws_role_arn = sys.argv[1]
+
+    # Get AWS ARN from env var if specified
+    elif 'AWS_GCP_ROLE' in os.environ:
+        aws_role_arn = os.environ['AWS_GCP_ROLE']
+    # Get AWS ARN from env var if specified
+    elif 'AWS_JANUS_ROLE' in os.environ:
+        aws_role_arn = os.environ['AWS_JANUS_ROLE']
+
+    # Fail if both argv and env var configuration failed
+    else:
+        print('Please specify AWS arn role:\neither via env var `AWS_JANUS_ROLE` or `AWS_GCP_ROLE` or \n CLI argument `{} arn:aws:iam::account-id:role/role-name`'.format(sys.argv[0]))
+        exit(1)
+
+    print(json.dumps(assume_aws_role_from_gcp(aws_role_arn)))
